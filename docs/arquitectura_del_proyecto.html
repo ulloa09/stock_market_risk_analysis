@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ModelosDeCredito — Pipeline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --border-bright: #2e2e4e;
+    --text: #c8c8e0;
+    --text-dim: #5a5a7a;
+    --text-bright: #eeeeff;
+    --accent: #4f46e5;
+    --accent-glow: rgba(79,70,229,0.25);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.15);
+    --yellow: #f59e0b;
+    --yellow-dim: rgba(245,158,11,0.15);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.15);
+    --blue: #38bdf8;
+    --blue-dim: rgba(56,189,248,0.12);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.12);
+    --teal: #2dd4bf;
+    --teal-dim: rgba(45,212,191,0.12);
+    --orange: #fb923c;
+    --orange-dim: rgba(251,146,60,0.12);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    padding: 48px 32px 80px;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    margin-bottom: 64px;
+  }
+  header .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  header h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -1px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Pipeline container ── */
+  .pipeline {
+    max-width: 980px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Layer ── */
+  .layer {
+    position: relative;
+  }
+
+  .layer-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    padding-left: 4px;
+  }
+
+  .layer-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  /* ── Node ── */
+  .node {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: var(--surface);
+    position: relative;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+  .node:hover {
+    border-color: var(--border-bright);
+    box-shadow: 0 0 20px rgba(79,70,229,0.08);
+  }
+  .node.accent-blue  { border-left: 3px solid var(--blue);   background: linear-gradient(135deg, var(--blue-dim), var(--surface)); }
+  .node.accent-green { border-left: 3px solid var(--green);  background: linear-gradient(135deg, var(--green-dim), var(--surface)); }
+  .node.accent-purple{ border-left: 3px solid var(--purple); background: linear-gradient(135deg, var(--purple-dim), var(--surface)); }
+  .node.accent-teal  { border-left: 3px solid var(--teal);   background: linear-gradient(135deg, var(--teal-dim), var(--surface)); }
+  .node.accent-orange{ border-left: 3px solid var(--orange); background: linear-gradient(135deg, var(--orange-dim), var(--surface)); }
+  .node.accent-yellow{ border-left: 3px solid var(--yellow); background: linear-gradient(135deg, var(--yellow-dim), var(--surface)); }
+  .node.accent-red   { border-left: 3px solid var(--red);    background: linear-gradient(135deg, var(--red-dim), var(--surface)); }
+  .node.accent-accent{ border-left: 3px solid var(--accent); background: linear-gradient(135deg, var(--accent-glow), var(--surface)); }
+
+  .node-icon {
+    font-size: 16px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .node-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+  .node-file {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+  }
+  .node-file span {
+    color: var(--accent);
+    opacity: 0.8;
+  }
+  .node-desc {
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .node-tags {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--border-bright);
+    color: var(--text-dim);
+    letter-spacing: 0.3px;
+  }
+  .tag.blue   { border-color: rgba(56,189,248,0.4);  color: var(--blue); }
+  .tag.green  { border-color: rgba(34,197,94,0.4);   color: var(--green); }
+  .tag.purple { border-color: rgba(167,139,250,0.4); color: var(--purple); }
+  .tag.yellow { border-color: rgba(245,158,11,0.4);  color: var(--yellow); }
+  .tag.teal   { border-color: rgba(45,212,191,0.4);  color: var(--teal); }
+  .tag.orange { border-color: rgba(251,146,60,0.4);  color: var(--orange); }
+  .tag.red    { border-color: rgba(239,68,68,0.4);   color: var(--red); }
+
+  /* ── Arrow ── */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+    gap: 8px;
+  }
+  .arrow-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border-bright);
+    max-width: 120px;
+  }
+  .arrow-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .arrow-icon {
+    color: var(--accent);
+    font-size: 18px;
+    line-height: 1;
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+  .arrow-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; transform: translateY(0); }
+    50%       { opacity: 1;   transform: translateY(2px); }
+  }
+
+  /* ── Fork (parallel paths) ── */
+  .fork-container {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .fork-branch {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .fork-branch .branch-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 5px 0;
+    margin-bottom: 6px;
+    border-radius: 3px;
+  }
+  .fork-branch .branch-label.model-a {
+    color: var(--blue);
+    background: var(--blue-dim);
+    border: 1px solid rgba(56,189,248,0.2);
+  }
+  .fork-branch .branch-label.model-b {
+    color: var(--purple);
+    background: var(--purple-dim);
+    border: 1px solid rgba(167,139,250,0.2);
+  }
+  .fork-divider {
+    width: 1px;
+    background: var(--border-bright);
+    align-self: stretch;
+    margin: 0 4px;
+    position: relative;
+  }
+  .fork-divider::before, .fork-divider::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--border-bright);
+  }
+  .fork-divider::before { top: 0; }
+  .fork-divider::after  { bottom: 0; }
+
+  /* ── Decision block ── */
+  .decision-block {
+    border: 1px solid var(--border-bright);
+    border-radius: 8px;
+    padding: 18px 20px;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  .decision-block::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(79,70,229,0.06), transparent);
+    pointer-events: none;
+  }
+  .decision-block .decision-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .decision-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .decision-outcome {
+    padding: 10px 12px;
+    border-radius: 5px;
+    border: 1px solid;
+    text-align: center;
+  }
+  .decision-outcome.approve {
+    border-color: rgba(34,197,94,0.35);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .decision-outcome.grey {
+    border-color: rgba(245,158,11,0.35);
+    background: var(--yellow-dim);
+    color: var(--yellow);
+  }
+  .decision-outcome.reject {
+    border-color: rgba(239,68,68,0.35);
+    background: var(--red-dim);
+    color: var(--red);
+  }
+  .decision-outcome .outcome-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .decision-outcome .outcome-rule {
+    font-size: 9.5px;
+    opacity: 0.8;
+    line-height: 1.4;
+  }
+
+  /* ── Output block ── */
+  .output-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .output-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    background: var(--surface);
+    text-align: center;
+  }
+  .output-item .out-icon { font-size: 20px; margin-bottom: 6px; }
+  .output-item .out-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 3px;
+  }
+  .output-item .out-desc {
+    font-size: 9.5px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  /* ── Section divider ── */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 32px 0 20px;
+  }
+  .section-divider hr {
+    flex: 1;
+    border: none;
+    border-top: 1px solid var(--border);
+  }
+  .section-divider span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    margin-top: 52px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .legend-title {
+    grid-column: 1 / -1;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10.5px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Step number badge ── */
+  .step-badge {
+    position: absolute;
+    top: -10px;
+    right: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border-bright);
+    border-radius: 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8px;
+    color: var(--text-dim);
+    padding: 2px 8px;
+    letter-spacing: 0.5px;
+  }
+
+header .author {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+               "Helvetica Neue", sans-serif;
+  font-size: clamp(14px, 1.5vw, 18px);
+  font-weight: 400;
+  color: #ffffff;
+  margin-top: 10px;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Arquitectura del Sistema</div>
+  <h1>Modelos<span>De</span>Credito — Pipeline</h1>
+<div class="author">Autor: Mauricio Martínez Ulloa</div>
+  <p>Flujo completo: entrada de tickers → modelos → decisión crediticia → reporte</p>
+</header>
+
+<div class="pipeline">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 1: INTERFAZ / ENTRADA                         -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>01 · Entrada del usuario</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">UI / API Layer</div>
+    <div class="layer-row">
+      <div class="node accent-blue">
+        <span class="node-icon">🖥️</span>
+        <div class="node-title">Frontend (SPA)</div>
+        <div class="node-file"><span>ui/</span>index.html</div>
+        <div class="node-desc">Single-page app servida en <code>GET /</code>. El usuario ingresa los tickers (máx. 20), lanza el análisis y hace polling del estado.</div>
+        <div class="node-tags">
+          <span class="tag blue">POST /api/analyze</span>
+          <span class="tag">GET /api/status/{job_id}</span>
+          <span class="tag">GET /api/results/{job_id}</span>
+        </div>
+      </div>
+      <div class="node accent-blue">
+        <span class="node-icon">⚡</span>
+        <div class="node-title">FastAPI App</div>
+        <div class="node-file"><span>api/</span>main.py · run_api.py</div>
+        <div class="node-desc">Instancia FastAPI con CORS. Registra los routers de <code>analyze</code> y <code>download</code>. Sirve <code>ui/index.html</code> y el directorio <code>outputs/</code> como estático.</div>
+        <div class="node-tags">
+          <span class="tag blue">uvicorn</span>
+          <span class="tag">CORS *</span>
+          <span class="tag blue">StaticFiles /outputs</span>
+        </div>
+      </div>
+      <div class="node accent-blue">
+        <span class="node-icon">📋</span>
+        <div class="node-title">Schemas Pydantic</div>
+        <div class="node-file"><span>api/</span>schemas.py</div>
+        <div class="node-desc">Contrato I/O de la API. Valida tickers (1–20), limpia strings, define <code>TickerRow</code> con todos los campos de resultado que consume el frontend.</div>
+        <div class="node-tags">
+          <span class="tag">AnalyzeRequest</span>
+          <span class="tag">TickerRow</span>
+          <span class="tag">ResultsResponse</span>
+          <span class="tag">DataWarning</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-line"></div>
+    <div class="arrow-body">
+      <div class="arrow-icon">↓</div>
+      <div class="arrow-label">BackgroundTask · job_id UUID</div>
+    </div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 2: JOB MANAGER + PIPELINE ORQUESTADOR         -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>02 · Orquestación</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">Routing & Job Management</div>
+    <div class="layer-row">
+      <div class="node accent-teal">
+        <span class="node-icon">🗂️</span>
+        <div class="node-title">Analyze Router</div>
+        <div class="node-file"><span>api/routes/</span>analyze.py</div>
+        <div class="node-desc">Lanza <code>_run_pipeline_task()</code> como BackgroundTask. Serializa <code>summary_df</code> → <code>TickerRow[]</code>. Lee <code>ar.risk_zone</code> directamente del ModelResult para <code>zscore_zone</code>.</div>
+        <div class="node-tags">
+          <span class="tag teal">POST /analyze</span>
+          <span class="tag teal">GET /results</span>
+          <span class="tag">_clean_float()</span>
+        </div>
+      </div>
+      <div class="node accent-teal">
+        <span class="node-icon">⚙️</span>
+        <div class="node-title">Job Manager</div>
+        <div class="node-file"><span>api/services/</span>job_manager.py</div>
+        <div class="node-desc">Singleton en memoria. Ciclo de vida: <code>queued → running → done | error</code>. Crea <code>outputs/jobs/{uuid}/plots/</code> y <code>reports/</code> por job. Almacena el <code>result</code> dict completo al terminar.</div>
+        <div class="node-tags">
+          <span class="tag">queued</span>
+          <span class="tag teal">running</span>
+          <span class="tag green">done</span>
+          <span class="tag red">error</span>
+        </div>
+      </div>
+      <div class="node accent-teal">
+        <span class="node-icon">🔁</span>
+        <div class="node-title">Download Router</div>
+        <div class="node-file"><span>api/routes/</span>download.py</div>
+        <div class="node-desc">Expone el PDF y Markdown generados para descarga directa. Lee el path desde <code>job.result["pdf_path"]</code> y <code>job.result["report_path"]</code>.</div>
+        <div class="node-tags">
+          <span class="tag teal">GET /download/pdf</span>
+          <span class="tag teal">GET /download/md</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-line"></div>
+    <div class="arrow-body">
+      <div class="arrow-icon">↓</div>
+      <div class="arrow-label">run_pipeline(tickers, output_dir)</div>
+    </div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 3: PIPELINE PRINCIPAL                         -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>03 · Pipeline principal</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">main.py · run_pipeline()</div>
+    <div class="layer-row">
+      <div class="node accent-orange">
+        <div class="step-badge">STEP 1</div>
+        <span class="node-icon">📡</span>
+        <div class="node-title">Data Fetcher</div>
+        <div class="node-file"><span>data/</span>fetcher.py</div>
+        <div class="node-desc">Descarga via <code>yfinance</code>: balance sheet (hasta 10 años), income statement, cash flow, market data y tasa libre de riesgo (<code>^TNX</code>). Cache en CSV por ticker.</div>
+        <div class="node-tags">
+          <span class="tag orange">yfinance</span>
+          <span class="tag">balance_sheet.csv</span>
+          <span class="tag">cache.py</span>
+          <span class="tag">force_refresh</span>
+        </div>
+      </div>
+      <div class="node accent-orange">
+        <div class="step-badge">STEP 2</div>
+        <span class="node-icon">🏷️</span>
+        <div class="node-title">Sector Classifier</div>
+        <div class="node-file"><span>classifiers/</span>sector_classifier.py</div>
+        <div class="node-desc">Detecta sector e industria de Yahoo Finance. Determina qué versión de Altman aplicar: <strong>Z original</strong> (manufactureras), <strong>Z'</strong> (privadas) o <strong>Z''</strong> (servicios/no-manufactureras).</div>
+        <div class="node-tags">
+          <span class="tag orange">Z original 1968</span>
+          <span class="tag orange">Z' 1983</span>
+          <span class="tag orange">Z'' 1995</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-line"></div>
+    <div class="arrow-body">
+      <div class="arrow-icon">↓</div>
+      <div class="arrow-label">CompanyData → CreditEvaluator</div>
+    </div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 4: MODELOS (PARALELO)                         -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>04 · Modelos cuantitativos</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">models/ · Ejecución por ticker</div>
+    <div class="fork-container">
+
+      <div class="fork-branch">
+        <div class="branch-label model-a">Altman Z-score</div>
+        <div class="node accent-blue">
+          <span class="node-icon">📊</span>
+          <div class="node-title">AltmanZScore</div>
+          <div class="node-file"><span>models/</span>altman_zscore.py</div>
+          <div class="node-desc">
+            Análisis discriminante sobre 5 ratios contables (X1–X5). Versión seleccionada por <code>SectorClassifier</code>.<br><br>
+            <strong>Z'':</strong> 6.56·X1 + 3.26·X2 + 6.72·X3 + 1.05·X4<br>
+            Zonas: Safe &gt;2.60 · Grey 1.10–2.60 · Distress &lt;1.10
+          </div>
+          <div class="node-tags">
+            <span class="tag blue">Working Capital/Assets</span>
+            <span class="tag blue">RE/Assets</span>
+            <span class="tag blue">EBIT/Assets</span>
+            <span class="tag blue">Equity/Liabilities</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fork-divider"></div>
+
+      <div class="fork-branch">
+        <div class="branch-label model-b">Merton (1974)</div>
+        <div class="node accent-purple">
+          <span class="node-icon">📐</span>
+          <div class="node-title">MertonModel</div>
+          <div class="node-file"><span>models/</span>merton.py</div>
+          <div class="node-desc">
+            Modelo estructural de opciones. V_A = Total Assets, D = Total Liabilities, σ_A = std(log-returns anuales).<br><br>
+            <strong>DD</strong> = [ln(V_A/D) + (r − σ²/2)·T] / (σ·√T)<br>
+            <strong>PD</strong> = N(−DD)
+          </div>
+          <div class="node-tags">
+            <span class="tag purple">^TNX tasa libre riesgo</span>
+            <span class="tag purple">T = 1 año</span>
+            <span class="tag purple">log-normal V_A</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-line"></div>
+    <div class="arrow-body">
+      <div class="arrow-icon">↓</div>
+      <div class="arrow-label">ModelResult → CreditEvaluator</div>
+    </div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 5: EVALUADOR + DECISIÓN                       -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>05 · Decisión crediticia consolidada</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">evaluation/ · credit_evaluator.py</div>
+    <div class="layer-row">
+      <div class="node accent-accent" style="flex: 1.4;">
+        <span class="node-icon">⚖️</span>
+        <div class="node-title">CreditEvaluator</div>
+        <div class="node-file"><span>evaluation/</span>credit_evaluator.py</div>
+        <div class="node-desc">Consolida los resultados de ambos modelos en una decisión única por ticker. Genera <code>summary_df</code> con todas las columnas para reporte y API.</div>
+      </div>
+      <div class="decision-block" style="flex: 2;">
+        <div class="decision-title">🔀 Lógica de Consolidación</div>
+        <div class="decision-grid">
+          <div class="decision-outcome approve">
+            <div class="outcome-label">✓ Aprobar</div>
+            <div class="outcome-rule">Altman Safe Zone <strong>AND</strong> Merton PD &lt; 1%</div>
+          </div>
+          <div class="decision-outcome grey">
+            <div class="outcome-label">~ Zona Gris</div>
+            <div class="outcome-rule">Alguno en Grey Zone, ninguno en Distress</div>
+          </div>
+          <div class="decision-outcome reject">
+            <div class="outcome-label">✕ Rechazar</div>
+            <div class="outcome-rule">Altman Distress Zone <strong>OR</strong> Merton PD &gt; 5%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-line"></div>
+    <div class="arrow-body">
+      <div class="arrow-icon">↓</div>
+      <div class="arrow-label">evaluations + summary_df + plot_paths</div>
+    </div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 6: VISUALIZACIÓN + REPORTE                    -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>06 · Visualización & Reporte</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">visualization/ · reporting/ · api/services/</div>
+    <div class="layer-row">
+      <div class="node accent-yellow">
+        <span class="node-icon">📈</span>
+        <div class="node-title">Visualization</div>
+        <div class="node-file"><span>visualization/</span>*.py</div>
+        <div class="node-desc">Genera 5 gráficos matplotlib: Z-score por modelo (original / Z''), DD Merton, PD Merton, Mapa de riesgo combinado. Guarda como PNG en <code>outputs/jobs/{id}/plots/</code>.</div>
+        <div class="node-tags">
+          <span class="tag yellow">zscore_original.png</span>
+          <span class="tag yellow">zscore_double_prime.png</span>
+          <span class="tag yellow">merton_dd.png</span>
+          <span class="tag yellow">merton_pd.png</span>
+          <span class="tag yellow">risk_heatmap.png</span>
+        </div>
+      </div>
+      <div class="node accent-yellow">
+        <span class="node-icon">📝</span>
+        <div class="node-title">ReportGenerator</div>
+        <div class="node-file"><span>reporting/</span>report_generator.py</div>
+        <div class="node-desc">Genera <code>credit_report.md</code> con secciones: portada, metodología, resultados por empresa, tabla comparativa (6 cols, <code>markdown="1"</code>), visualizaciones, conclusiones y bibliografía.</div>
+        <div class="node-tags">
+          <span class="tag yellow">credit_report.md</span>
+          <span class="tag">table-summary CSS</span>
+          <span class="tag">span decision colors</span>
+        </div>
+      </div>
+      <div class="node accent-yellow">
+        <span class="node-icon">📄</span>
+        <div class="node-title">PDF Converter</div>
+        <div class="node-file"><span>api/services/</span>pdf_converter.py</div>
+        <div class="node-desc">Pipeline: MD → HTML (markdown + <code>md_in_html</code>) → imágenes embebidas en base64 → CSS profesional → WeasyPrint → <code>credit_report.pdf</code>. Bibliografía con sangría francesa.</div>
+        <div class="node-tags">
+          <span class="tag yellow">WeasyPrint</span>
+          <span class="tag">A4 · @page</span>
+          <span class="tag">base64 imgs</span>
+          <span class="tag yellow">credit_report.pdf</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-line"></div>
+    <div class="arrow-body">
+      <div class="arrow-icon">↓</div>
+      <div class="arrow-label">job.set_done(result) → polling frontend</div>
+    </div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CAPA 7: OUTPUTS                                    -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="section-divider"><hr><span>07 · Outputs</span><hr></div>
+
+  <div class="layer">
+    <div class="layer-label">outputs/jobs/{uuid}/</div>
+    <div class="output-grid">
+      <div class="output-item">
+        <div class="out-icon">🌐</div>
+        <div class="out-name">UI Resultados</div>
+        <div class="out-desc">Tabla interactiva con badges de zona Altman y decisión, gráficos en base64, advertencias por ticker</div>
+      </div>
+      <div class="output-item">
+        <div class="out-icon">📄</div>
+        <div class="out-name">credit_report.pdf</div>
+        <div class="out-desc">19 páginas A4: metodología, resultados por empresa, tabla comparativa formateada, 5 gráficos embebidos</div>
+      </div>
+      <div class="output-item">
+        <div class="out-icon">📝</div>
+        <div class="out-name">credit_report.md</div>
+        <div class="out-desc">Fuente del reporte en Markdown con HTML inline para colores de decisión y clases CSS</div>
+      </div>
+      <div class="output-item">
+        <div class="out-icon">🖼️</div>
+        <div class="out-name">plots/ (5 PNGs)</div>
+        <div class="out-desc">zscore_original · zscore_double_prime · merton_dd · merton_pd · risk_heatmap</div>
+      </div>
+      <div class="output-item">
+        <div class="out-icon">💾</div>
+        <div class="out-name">data/ cache CSVs</div>
+        <div class="out-desc">balance_sheet · income_stmt · cash_flow · market_data · companies por ticker</div>
+      </div>
+      <div class="output-item">
+        <div class="out-icon">⚠️</div>
+        <div class="out-name">DataWarnings</div>
+        <div class="out-desc">Advertencias por ticker: datos parciales, σ_A con &lt;5 años, Working Capital incompleto</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end pipeline -->
+
+<!-- Legend -->
+<div class="legend" style="max-width:980px; margin: 52px auto 0;">
+  <div class="legend-title">Leyenda de capas</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#38bdf8"></div>UI / FastAPI / Schemas</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#2dd4bf"></div>Routing / Job Management</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div>Data & Clasificación</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#38bdf8"></div>Modelo Altman Z-score</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>Modelo Merton (1974)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4f46e5"></div>Evaluador / Consolidación</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Visualización / Reporte / PDF</div>
+</div>
+
+</body>
+</html>

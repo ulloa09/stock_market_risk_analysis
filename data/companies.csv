@@ -1,0 +1,6 @@
+ticker,company_name,sector,industry,currency,last_fetched_at,last_fiscal_year
+LULU,lululemon athletica inc.,Consumer Cyclical,Apparel Retail,USD,2026-02-23T01:39:24.160266+00:00,2025-01-31
+INTC,Intel Corporation,Technology,Semiconductors,USD,2026-02-23T01:39:25.362578+00:00,2025-12-31
+C,Citigroup Inc.,Financial Services,Banks - Diversified,USD,2026-02-23T01:39:26.488405+00:00,2024-12-31
+F,Ford Motor Company,Consumer Cyclical,Auto Manufacturers,USD,2026-02-23T01:39:27.644117+00:00,2025-12-31
+JPM,JPMorgan Chase & Co.,Financial Services,Banks - Diversified,USD,2026-02-23T01:39:28.822377+00:00,2025-12-31
