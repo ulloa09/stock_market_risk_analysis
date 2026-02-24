@@ -1,9 +1,14 @@
 """
 download.py
 -----------
-Ruta para descargar el reporte en PDF.
 
-    GET /api/download/{job_id}/pdf  → FileResponse del PDF generado
+Endpoint encargado de exponer el reporte final en formato PDF
+generado por el pipeline de análisis de riesgo crediticio.
+
+Responsabilidad:
+- Validar que el job haya finalizado correctamente.
+- Verificar existencia física del archivo en disco.
+- Retornar FileResponse con headers adecuados para descarga forzada.
 """
 
 from __future__ import annotations
@@ -23,9 +28,20 @@ router = APIRouter()
 @router.get("/download/{job_id}/pdf")
 async def download_pdf(job_id: str):
     """
-    Descarga el reporte PDF del análisis indicado.
-    El job debe estar en estado 'done' y el PDF debe existir en disco.
+    Endpoint: GET /api/download/{job_id}/pdf
+
+    Permite descargar el reporte técnico en PDF correspondiente
+    al análisis de Altman + Merton.
+
+    Requisitos:
+    - El job debe estar en estado 'done'.
+    - El archivo PDF debe existir en el directorio de salida.
+
+    Responde con:
+    - application/pdf
+    - Content-Disposition: attachment
     """
+    # Recuperar información del job desde el gestor centralizado
     job = job_manager.get(job_id)
 
     if job is None:
@@ -37,6 +53,7 @@ async def download_pdf(job_id: str):
             detail=f"Análisis no completado. Estado: {job.status}",
         )
 
+    # Extraer ruta del PDF previamente almacenada en el resultado del job
     pdf_path: Path | None = job.result.get("pdf_path") if job.result else None
 
     if pdf_path is None or not pdf_path.exists():
@@ -45,6 +62,7 @@ async def download_pdf(job_id: str):
             detail="PDF no disponible. Puede que la conversión haya fallado.",
         )
 
+    # Enviar archivo como descarga forzada al cliente
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
