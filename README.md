@@ -4,7 +4,9 @@
 
 **Autor:** Mauricio Martínez Ulloa  
 **Diagrama de arquitectura:** [Ver arquitectura del sistema](https://ulloa09.github.io/stock_market_risk_analysis/)
-
+**Acceso al reporte ejecutivo en formato DOCX (Exclusivo para comunidad ITESO):**
+[Ver reporte ejecutivo]
+(https://iteso01-my.sharepoint.com/:w:/g/personal/mauricio_martinezu_iteso_mx/IQBRM82ZCPLZQonGqP_lUsEVARAc8oejKg9iqF9KI6HlSg0?e=PRFUOm)
 ---
 
 ## Tabla de Contenidos
