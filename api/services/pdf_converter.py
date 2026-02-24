@@ -1,31 +1,35 @@
 """
 pdf_converter.py
 ----------------
-Convierte el reporte Markdown generado por ReportGenerator a PDF.
+Módulo responsable de la conversión del reporte técnico generado
+por el pipeline cuantitativo (Altman + Merton) desde Markdown a PDF.
+
+Contexto dentro del sistema:
+----------------------------
+El ReportGenerator produce un archivo .md estructurado con:
+    - Resultados de Z-Score (Altman)
+    - Métricas estructurales de Merton (DD y PD)
+    - Tablas comparativas
+    - Gráficos exportados como PNG
+    - Bibliografía académica
+
+Este módulo transforma dicho documento en un PDF profesional listo
+para descarga desde la API.
 
 Pipeline de conversión:
-    1. Lee el archivo .md
-    2. Convierte a HTML con la librería `markdown` (extensión extra: md_in_html
-       para renderizar divs con contenido Markdown dentro)
-    3. Resuelve rutas de imágenes relativas → base64 embebido en el HTML
-       (necesario para que WeasyPrint encuentre las imágenes sin servidor)
-    4. Aplica CSS de estilo profesional inline
-    5. Renderiza el HTML a PDF con WeasyPrint
+    1. Lectura del archivo Markdown.
+    2. Conversión a HTML mediante la librería `markdown`.
+    3. Embebido de imágenes locales en formato base64.
+    4. Aplicación de CSS corporativo inline.
+    5. Renderizado final a PDF usando WeasyPrint.
 
-Por qué WeasyPrint sobre pdfkit/wkhtmltopdf:
-    - No requiere binarios externos instalados en el sistema
-    - Maneja CSS moderno correctamente
-    - Embebe imágenes base64 sin problemas
-    - Output consistente cross-platform
-
-Clases CSS disponibles para usar en el Markdown (via HTML inline):
-    .decision-aprobar      — texto verde, negrita (APROBADO)
-    .decision-rechazar     — texto rojo, negrita (RECHAZADO)
-    .decision-zona-gris    — texto amarillo/ámbar, negrita (ZONA GRIS)
-    .decision-incalculable — texto gris, negrita
-    .label-advertencia     — badge amarillo pequeño (ADVERTENCIA)
-    .table-wide            — div wrapper que permite tabla con font-size reducido
-                             y word-break agresivo para que no se corte en A4
+Decisión tecnológica:
+----------------------
+Se utiliza WeasyPrint porque:
+    - No depende de binarios externos (wkhtmltopdf).
+    - Soporta CSS moderno.
+    - Permite renderizado consistente cross-platform.
+    - Maneja correctamente data URIs (base64).
 """
 
 from __future__ import annotations
@@ -37,7 +41,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# ── CSS ────────────────────────────────────────────────────────────────────
+# Hoja de estilos global aplicada al PDF.
+# Define tipografía, tablas financieras, etiquetas de decisión
+# y formato de bibliografía académica.
+
 _PDF_CSS = """
 @page {
     size: A4;
@@ -258,18 +265,35 @@ h2 + p {
 
 def convert_md_to_pdf(md_path: Path, pdf_path: Path) -> Path:
     """
-    Convierte un archivo Markdown a PDF.
+    Convierte un archivo Markdown a PDF mediante renderizado HTML intermedio.
+
+    Flujo técnico:
+    --------------
+    1. Validación de dependencias (markdown, weasyprint).
+    2. Lectura del contenido Markdown.
+    3. Transformación a HTML estructurado.
+    4. Embebido de imágenes locales como data URIs.
+    5. Aplicación de CSS profesional.
+    6. Renderizado final a PDF.
 
     Parámetros:
-        md_path:  Path del archivo .md generado por ReportGenerator
-        pdf_path: Path donde se guardará el .pdf resultante
+    -----------
+    md_path : Path
+        Ruta del archivo Markdown generado por el pipeline.
+    pdf_path : Path
+        Ruta destino donde se escribirá el PDF.
 
     Retorna:
-        pdf_path si la conversión fue exitosa.
+    --------
+    Path
+        Ruta final del PDF generado.
 
     Lanza:
-        RuntimeError si la conversión falla.
+    ------
+    RuntimeError si ocurre un fallo en dependencias o renderizado.
     """
+    # Import dinámico para evitar dependencia obligatoria
+    # si el módulo no es utilizado en tiempo de ejecución
     try:
         import markdown as md_lib
         from weasyprint import HTML, CSS
@@ -284,25 +308,27 @@ def convert_md_to_pdf(md_path: Path, pdf_path: Path) -> Path:
 
     logger.info(f"Convirtiendo {md_path.name} → PDF")
 
-    # 1. Leer Markdown
+    # Lectura completa del archivo Markdown en UTF-8
     md_content = md_path.read_text(encoding="utf-8")
 
-    # 2. Markdown → HTML
-    # md_in_html permite que divs con clase (e.g. <div class="table-wide">)
-    # procesen su contenido interno como Markdown.
+    # Conversión Markdown → HTML con extensiones necesarias
+    # tables: tablas comparativas financieras
+    # fenced_code: bloques de código
+    # toc: tabla de contenidos
+    # nl2br: saltos de línea explícitos
+    # md_in_html: permite procesar Markdown dentro de divs HTML
     html_body = md_lib.markdown(
         md_content,
         extensions=["tables", "fenced_code", "toc", "nl2br", "md_in_html"],
     )
 
-    # 3. Resolver imágenes locales → base64
+    # Embebido de imágenes locales para evitar dependencias externas
     html_body = _embed_images(html_body, md_path.parent)
 
-    # 4. Envolver la sección de bibliografía en .bibliography para sangría francesa.
-    # La sección empieza en <h2>Bibliografía</h2> y va hasta el fin del documento.
+    # Aplicación de formato especial a sección de bibliografía
     html_body = _wrap_bibliography(html_body)
 
-    # 5. HTML completo con CSS
+    # Construcción del documento HTML completo con CSS inline
     full_html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -315,7 +341,7 @@ def convert_md_to_pdf(md_path: Path, pdf_path: Path) -> Path:
 </body>
 </html>"""
 
-    # 6. WeasyPrint: HTML → PDF
+    # Renderizado final HTML → PDF utilizando motor WeasyPrint
     try:
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
         HTML(string=full_html, base_url=str(md_path.parent)).write_pdf(
@@ -331,14 +357,17 @@ def convert_md_to_pdf(md_path: Path, pdf_path: Path) -> Path:
 
 def _embed_images(html: str, base_dir: Path) -> str:
     """
-    Reemplaza rutas de imágenes relativas en el HTML por data URIs base64.
+    Convierte rutas de imágenes locales en data URIs base64.
 
-    El Markdown generado por ReportGenerator usa rutas relativas como:
-        ../plots/decision_summary.png
+    Motivación:
+    -----------
+    Cuando el HTML se renderiza desde un string, WeasyPrint puede
+    no resolver correctamente rutas relativas. Embebiendo las imágenes
+    se garantiza portabilidad y consistencia del PDF.
 
-    WeasyPrint necesita rutas absolutas o base64 para resolverlas correctamente
-    cuando el HTML se pasa como string (sin base_url confiable).
+    Solo procesa imágenes locales (no http/https/data).
     """
+    # Expresión regular que captura etiquetas <img> y su atributo src
     img_pattern = re.compile(
         r'<img([^>]*?)src=["\']([^"\']+)["\']([^>]*?)/?>', re.IGNORECASE
     )
@@ -348,7 +377,7 @@ def _embed_images(html: str, base_dir: Path) -> str:
         src    = match.group(2)
         after  = match.group(3)
 
-        # Solo procesar rutas locales (no http/https/data)
+        # Ignorar imágenes externas o ya embebidas
         if src.startswith(("http://", "https://", "data:")):
             return match.group(0)
 
@@ -369,11 +398,11 @@ def _embed_images(html: str, base_dir: Path) -> str:
 
 def _wrap_bibliography(html: str) -> str:
     """
-    Envuelve la sección de bibliografía en un div.bibliography para aplicar
-    la sangría francesa (padding-left: 2em; text-indent: -2em) vía CSS.
+    Encapsula la sección de Bibliografía dentro de un contenedor
+    con clase CSS específica para aplicar sangría francesa.
 
-    Detecta el h2 con texto "Bibliografía" y envuelve toodo lo que sigue
-    hasta el fin del body en <div class="bibliography">...</div>.
+    Esto replica el formato académico estándar (APA/Chicago-like)
+    mediante CSS (padding-left + text-indent negativo).
     """
     # Busca h2 con contenido "Bibliografía" (con o sin tilde)
     pattern = re.compile(
