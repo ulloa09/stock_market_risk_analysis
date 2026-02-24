@@ -1,10 +1,19 @@
 """
 base_model.py
 -------------
-Define el contrato que tocho modelo de riesgo crediticio debe cumplir.
+Define las abstracciones fundamentales del sistema de riesgo crediticio.
 
-Principio: Open/Closed — el sistema está abierto a nuevos modelos
-(agregar un modelo nuevo = crear una subclase) sin modificar nada existente.
+Contiene:
+    - ModelResult → estructura estándar de salida para cualquier modelo.
+    - CreditModel → interfaz abstracta que garantiza consistencia
+      entre implementaciones (Altman, Merton u otros futuros).
+
+Principios de diseño aplicados:
+    - Open/Closed: nuevos modelos se agregan mediante subclases.
+    - Liskov Substitution: cualquier CreditModel puede utilizarse
+      indistintamente por el evaluador.
+    - Single Responsibility: este módulo solo define contratos,
+      no contiene lógica financiera.
 """
 
 from __future__ import annotations
@@ -17,14 +26,25 @@ from typing import Optional
 @dataclass
 class ModelResult:
     """
-    Contenedor estándar de resultados para cualquier modelo.
-    Todos los modelos retornan este mismo objeto — facilita
-    comparación, reporte y visualización uniforme.
+    Estructura uniforme de salida para modelos cuantitativos de riesgo.
+
+    Permite desacoplar:
+        - Cálculo financiero (modelo).
+        - Evaluación consolidada.
+        - Generación de reportes.
+
+    Campos clave:
+        score → métrica principal (Z-score o Distance to Default).
+        probability_of_default → PD explícita (solo Merton).
+        credit_decision → decisión operativa normalizada.
+        components → métricas intermedias para auditoría técnica.
+
+    El diseño facilita trazabilidad, comparabilidad y extensibilidad.
     """
     ticker: str
     model_name: str                  # e.g., "Altman Z-score (Z'')", "Merton"
 
-    # Puntuación principal del modelo
+    # Métrica cuantitativa principal del modelo.
     score: Optional[float] = None    # Z-score o Distance to Default
 
     # Probabilidad de default (0-1). Merton la calcula directamente.
@@ -35,7 +55,7 @@ class ModelResult:
     credit_decision: str = "INCALCULABLE"  # "APROBAR" | "RECHAZAR" | "ZONA GRIS" | "INCALCULABLE"
     risk_zone: str = ""                    # descripción de la zona (e.g., "Distress", "Safe")
 
-    # Componentes intermedios usados en el cálculo
+    # Diccionario con variables internas relevantes para análisis técnico y auditoría.
     # (ratios para Z-score, V_A / sigma_A para Merton, etc.)
     components: dict = field(default_factory=dict)
 
@@ -49,17 +69,27 @@ class ModelResult:
     error: Optional[str] = None
 
     def is_calculable(self) -> bool:
+        """
+        Indica si el modelo produjo un resultado válido.
+
+        Un resultado es calculable si:
+            - Existe score numérico.
+            - No se registró error crítico.
+        """
         return self.score is not None and self.error is None
 
 
 class CreditModel(ABC):
     """
-    Interfaz que toodo modelo de riesgo crediticio debe implementar.
+    Contrato formal para cualquier modelo cuantitativo de riesgo.
 
-    Métodos obligatorios:
-        calculate(company) → ModelResult
-        describe()         → str   (introducción del modelo para el reporte)
-        name               → str   (identificador legible)
+    Tod0 modelo debe:
+        1. Exponer un nombre legible.
+        2. Implementar calculate().
+        3. Proveer descripción metodológica.
+
+    El evaluador depende únicamente de esta interfaz
+    (principio de inversión de dependencias).
     """
 
     @property
@@ -93,8 +123,10 @@ class CreditModel(ABC):
 
     def safe_calculate(self, company) -> ModelResult:
         """
-        Wrapper que garantiza que calculate() nunca propague una excepción.
-        Úsalo desde el evaluador en lugar de llamar calculate() directamente.
+        Wrapper defensivo que encapsula excepciones inesperadas.
+
+        Garantiza que el flujo batch nunca se interrumpa
+        por errores individuales de cálculo.
         """
         try:
             return self.calculate(company)

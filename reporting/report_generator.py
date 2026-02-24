@@ -1,7 +1,16 @@
 """
 report_generator.py
 -------------------
-Genera el reporte completo en Markdown con los resultados de evaluación crediticia.
+Genera el reporte integral en Markdown a partir de los
+resultados de evaluación crediticia.
+
+Responsabilidades:
+    - Construcción estructurada por secciones.
+    - Integración de tablas y visualizaciones.
+    - Preparación para conversión posterior a PDF.
+
+No ejecuta cálculos financieros.
+Actúa como capa de presentación.
 """
 
 from __future__ import annotations
@@ -19,16 +28,17 @@ from models.merton import MertonModel
 
 logger = logging.getLogger(__name__)
 
+# Directorio por defecto para reportes generados.
 _DEFAULT_OUTPUT = Path("outputs/reports")
 
-# Meses en español — evita dependencia de locale del sistema operativo.
+# Diccionario manual para evitar dependencia del local del sistema.
 _MESES_ES = {
     1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
     5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
     9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
 }
 
-# Etiquetas de decisión con clases CSS (renderizadas por WeasyPrint en el PDF)
+# Mapeo de decisiones operativas a etiquetas HTML estilizadas para PDF.
 _DECISION_LABEL = {
     "APROBAR":       '<span class="decision-aprobar">APROBADO</span>',
     "ZONA GRIS":     '<span class="decision-zona-gris">ZONA GRIS</span>',
@@ -43,12 +53,28 @@ _DISTRESS_LABEL = '<span class="decision-rechazar">Distress Zone</span>'
 
 
 def _fecha_es(dt: datetime) -> str:
+    # Formateo de fecha en español independiente del entorno del sistema.
     return f"{dt.day} de {_MESES_ES[dt.month]} de {dt.year}"
 
 
 class ReportGenerator:
+    """
+    Construye el documento final de evaluación crediticia.
 
+    Orquesta múltiples secciones:
+        - Portada
+        - Descripción metodológica
+        - Resultados individuales
+        - Tabla comparativa
+        - Visualizaciones
+        - Conclusiones
+        - Bibliografía
+
+    Diseñado para producir Markdown compatible con conversión
+    posterior a HTML/PDF mediante WeasyPrint.
+    """
     def __init__(self, output_dir: str = str(_DEFAULT_OUTPUT)):
+        # Se almacenan descripciones una sola vez para evitar recalcular.
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._altman_description = AltmanZScore().describe()
@@ -80,6 +106,7 @@ class ReportGenerator:
 
     # ── Secciones ──────────────────────────────────────────────────────────
 
+    # Sección: Portada
     def _section_cover(self, evaluations: dict[str, CompanyEvaluation]) -> str:
         tickers  = list(evaluations.keys())
         date_str = _fecha_es(datetime.now())
@@ -98,6 +125,7 @@ Merton modela la probabilidad de default desde la teoría de opciones sobre acti
 La decisión consolidada requiere que ambos modelos coincidan en APROBAR.
 Un rechazo en cualquiera de los dos es suficiente para escalar o rechazar."""
 
+    # Sección: Descripción de Modelos
     def _section_model_intro(self) -> str:
         return f"""## Modelos Utilizados
 
@@ -109,6 +137,7 @@ Un rechazo en cualquiera de los dos es suficiente para escalar o rechazar."""
 
 {self._merton_description}"""
 
+    # Sección: Metodología y Justificación de Variables
     def _section_methodology(self) -> str:
         return """\
 ## Metodología y Fuentes de Datos
@@ -236,6 +265,7 @@ constructor de `MertonModel`.
 El sistema detecta el sector e industria de cada empresa vía Yahoo Finance y aplica
 la versión correcta del Z-score sin intervención del usuario (Z original, Z' o Z'')."""
 
+    # Sección: Resultados Detallados por Empresa
     def _section_results_per_company(self, evaluations: dict[str, CompanyEvaluation]) -> str:
         sections = ["## Resultados por Empresa"]
         for ev in evaluations.values():
@@ -323,6 +353,7 @@ la versión correcta del Z-score sin intervención del usuario (Z original, Z' o
             return _DISTRESS_LABEL
         return risk_zone
 
+    # Sección: Tabla Comparativa Resumida
     def _section_summary_table(self, summary_df: pd.DataFrame) -> str:
         """
         Tabla comparativa — 6 columnas para caber en A4 vertical.
@@ -370,6 +401,7 @@ la versión correcta del Z-score sin intervención del usuario (Z original, Z' o
             "</div>"
         )
 
+    # Sección: Visualizaciones Gráficas
     def _section_visualizations(self, plot_paths: dict[str, Path]) -> str:
         if not plot_paths:
             return "## Visualizaciones\n\n*Gráficos no generados.*"
@@ -416,6 +448,7 @@ la versión correcta del Z-score sin intervención del usuario (Z original, Z' o
 
         return "\n\n".join(lines)
 
+    # Sección: Conclusiones del Portafolio
     def _section_conclusions(
         self,
         evaluations: dict[str, CompanyEvaluation],
@@ -453,6 +486,7 @@ la versión correcta del Z-score sin intervención del usuario (Z original, Z' o
         ]
         return "\n".join(lines)
 
+    # Sección: Referencias Académicas
     def _section_bibliography(self) -> str:
         return """\
 ## Bibliografía
