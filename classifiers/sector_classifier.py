@@ -28,10 +28,30 @@ from enum import Enum
 
 
 class ZScoreModel(str, Enum):
+    """
+    Enumeración de las variantes del modelo Z-score de Altman.
+
+    ORIGINAL (1968):
+        Diseñado para empresas manufactureras que cotizan en bolsa.
+        Incluye el ratio Ventas/Activos Totales.
+
+    PRIME (1983):
+        Adaptación para empresas manufactureras privadas.
+        Ajusta coeficientes para estructura de capital distinta.
+
+    DOUBLE_PRIME (1995):
+        Versión universal para empresas no manufactureras,
+        servicios y mercados emergentes.
+        Elimina el ratio de Ventas/Activos.
+    """
     ORIGINAL     = "Z_ORIGINAL"       # Altman 1968 — manufactureras públicas
     PRIME        = "Z_PRIME"          # Altman 1983 — manufactureras privadas
     DOUBLE_PRIME = "Z_DOUBLE_PRIME"   # Altman 1995 — no manufactureras / servicios
 
+
+# Conjunto explícito de industrias consideradas manufactureras.
+# El enfoque es "opt-in": solo si la industria aparece aquí
+# se permite aplicar Z original o Z'.
 
 # ---------------------------------------------------------------------------
 # Industrias explícitamente manufactureras — opt-in para Z original
@@ -135,16 +155,22 @@ _MANUFACTURING_INDUSTRIES = {
 
 class SectorClassifier:
     """
-    Determina el modelo Z-score apropiado para una empresa.
+    Clasificador responsable de determinar qué versión del
+    Z-score debe aplicarse a una empresa según su industria.
 
-    Lógica (opt-in para manufactura):
-        1. Si la industria está en _MANUFACTURING_INDUSTRIES → Z original (pública)
-        2. En cualquier otro caso → Z'' (default conservador y universal)
+    Principio metodológico:
+    ------------------------
+    La clasificación sectorial de Yahoo Finance es heterogénea.
+    Por ello, la decisión no se basa en el sector general,
+    sino en la industria específica.
 
-    Esta lógica es más robusta que filtrar por sector porque los sectores de
-    Yahoo Finance son heterogéneos. "Consumer Cyclical" incluye tanto
-    Auto Manufacturers (manufactura real) como Travel Services (servicio puro).
-    Solo la industria específica permite distinguirlos correctamente.
+    Estrategia conservadora:
+        - Si la industria está explícitamente catalogada como manufactura
+          → Z original (pública) o Z' (privada).
+        - En cualquier otro caso → Z'' (modelo universal).
+
+    Esto minimiza errores de clasificación en empresas de servicios
+    dentro de sectores mixtos (ej. Technology, Consumer Cyclical).
     """
 
     def classify(
@@ -153,17 +179,27 @@ class SectorClassifier:
         industry: str,
         is_public: bool = True,
     ) -> ZScoreModel:
+        # Normalización defensiva de strings provenientes de APIs externas
         sector   = sector.strip()   if sector   else "Unknown"
         industry = industry.strip() if industry else "Unknown"
 
-        # Regla única: opt-in a manufactura por industria específica
+        # Regla central: únicamente industrias explícitas califican
+        # como manufactureras bajo el modelo original
         if industry in _MANUFACTURING_INDUSTRIES:
             return ZScoreModel.ORIGINAL if is_public else ZScoreModel.PRIME
 
-        # Default: Z'' — cubre servicios, tech, finanzas, retail, travel, etc.
+        # Default conservador: aplicar Z'' para cualquier otro caso
         return ZScoreModel.DOUBLE_PRIME
 
     def get_model_description(self, model: ZScoreModel) -> str:
+        """
+        Retorna una descripción textual del modelo Z-score seleccionado.
+
+        Utilizado principalmente para:
+            - Reportes técnicos
+            - Visualización en frontend
+            - Justificación metodológica
+        """
         descriptions = {
             ZScoreModel.ORIGINAL: (
                 "Z-score original de Altman (1968). "

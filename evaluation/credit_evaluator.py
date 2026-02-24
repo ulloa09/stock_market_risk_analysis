@@ -41,8 +41,16 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompanyEvaluation:
     """
-    Resultado completo de la evaluación crediticia de una empresa.
-    Contiene los resultados individuales de cada modelo y la decisión consolidada.
+    Representa el resultado integral del análisis crediticio
+    de una empresa bajo el enfoque dual Altman + Merton.
+
+    Contiene:
+        - Resultados individuales de cada modelo.
+        - Decisión consolidada.
+        - Razonamiento explicativo.
+
+    Esta estructura desacopla la lógica de evaluación
+    del formato de reporte o visualización.
     """
     ticker: str
     company_name: str
@@ -58,7 +66,12 @@ class CompanyEvaluation:
     consolidated_reasoning: str = ""
 
     def is_fully_calculable(self) -> bool:
-        """True si ambos modelos pudieron calcularse."""
+        """
+        Indica si ambos modelos pudieron calcularse correctamente.
+
+        Es útil para métricas agregadas o filtrado de empresas
+        antes de realizar comparaciones cuantitativas.
+        """
         return (
             self.altman_result is not None and self.altman_result.is_calculable()
             and self.merton_result is not None and self.merton_result.is_calculable()
@@ -91,13 +104,18 @@ class CompanyEvaluation:
 
 class CreditEvaluator:
     """
-    Ejecuta los modelos de crédito sobre múltiples empresas y consolida
-    los resultados.
+    Orquestador principal del proceso de evaluación crediticia.
 
-    Uso:
-        evaluator = CreditEvaluator(altman_model, merton_model)
-        evaluations = evaluator.evaluate_all(companies_dict)
-        summary_df  = evaluator.summary_dataframe(evaluations)
+    No implementa fórmulas financieras.
+    Delegación:
+        - AltmanModel → análisis contable-discriminante.
+        - MertonModel → análisis estructural basado en Black-Scholes.
+
+    Responsabilidades:
+        - Ejecutar ambos modelos.
+        - Manejar errores de cálculo de forma aislada.
+        - Consolidar decisiones bajo lógica conservadora.
+        - Proveer estructuras listas para reporte.
     """
 
     def __init__(self, altman_model: CreditModel, merton_model: CreditModel):
@@ -110,16 +128,16 @@ class CreditEvaluator:
 
     def evaluate(self, company) -> CompanyEvaluation:
         """
-        Evalúa una empresa con ambos modelos.
+        Ejecuta el análisis dual sobre una empresa individual.
 
-        Introduce el proceso:
-            1. Ejecuta Altman Z-score (versión auto-seleccionada por sector)
-            2. Ejecuta Merton para obtener DD y PD
-            3. Consolida ambas decisiones con lógica conservadora
-            4. Registra advertencias de datos insuficientes
+        Flujo:
+            1. Cálculo de Z-score (según sector/industria).
+            2. Estimación estructural (DD y PD vía Merton).
+            3. Aplicación de reglas de consolidación.
+            4. Registro del resultado en logs.
 
         Retorna:
-            CompanyEvaluation con resultados de ambos modelos y decisión final.
+            CompanyEvaluation con detalle completo.
         """
         ticker = company.ticker
         logger.info(f"[{ticker}] Evaluando con Altman y Merton.")
@@ -147,15 +165,14 @@ class CreditEvaluator:
         self, companies: dict
     ) -> dict[str, CompanyEvaluation]:
         """
-        Evalúa un diccionario de empresas {ticker: CompanyFinancials}.
+        Evalúa múltiples empresas de manera independiente.
 
-        Conclusión del métoodo:
-            Procesa cada empresa de forma independiente. Si una empresa
-            no tiene datos suficientes para algún modelo, ese modelo
-            retorna INCALCULABLE sin interrumpir la evaluación de las demás.
+        Diseño robusto:
+            Un fallo en una empresa no interrumpe el proceso
+            del resto del portafolio.
 
         Retorna:
-            {ticker: CompanyEvaluation}
+            Diccionario {ticker: CompanyEvaluation}
         """
         results = {}
         for ticker, company in companies.items():
@@ -177,8 +194,15 @@ class CreditEvaluator:
         self, evaluations: dict[str, CompanyEvaluation]
     ) -> pd.DataFrame:
         """
-        Construye un DataFrame comparativo con una fila por empresa.
-        Útil para visualización y reporte.
+        Construye un DataFrame consolidado para análisis comparativo.
+
+        Incluye métricas clave:
+            - Z-score y zona de riesgo.
+            - Distancia al Default (DD).
+            - Probabilidad de Default (PD).
+            - Decisión consolidada.
+
+        Ordena por severidad crediticia para facilitar lectura ejecutiva.
         """
         rows = [ev.to_summary_dict() for ev in evaluations.values()]
         df = pd.DataFrame(rows)
@@ -217,18 +241,17 @@ class CreditEvaluator:
         altman: ModelResult, merton: ModelResult
     ) -> tuple[str, str]:
         """
-        Lógica conservadora de consolidación:
+        Aplica reglas conservadoras de decisión conjunta.
 
-        Regla 1: Si algún modelo no pudo calcularse → INCALCULABLE
-        Regla 2: Si alguno RECHAZA → decisión consolidada RECHAZAR
-        Regla 3: Si alguno es ZONA GRIS y el otro APRUEBA → ZONA GRIS
-        Regla 4: Solo si AMBOS APRUEBAN → APROBAR
+        Marco conceptual:
+            - Altman captura riesgo contable-histórico.
+            - Merton captura riesgo de mercado y volatilidad implícita.
 
-        Esta lógica refleja la práctica bancaria: en due diligence crediticio
-        una señal de alerta en cualquier modelo es suficiente para escalar
-        el análisis o rechazar. La aprobación requiere consenso.
+        La consolidación refleja práctica bancaria real:
+            Cualquier señal de deterioro relevante
+            impide aprobación automática.
         """
-        # Regla 1
+        # Validación preliminar: ambos modelos deben ser computables
         altman_ok = altman.is_calculable()
         merton_ok = merton.is_calculable()
 
@@ -239,6 +262,7 @@ class CreditEvaluator:
         if not merton_ok:
             return "INCALCULABLE", f"Merton no calculable: {merton.error}"
 
+        # Conjunto de decisiones individuales para análisis conjunto
         decisions = {altman.credit_decision, merton.credit_decision}
 
         # Regla 2
@@ -268,6 +292,11 @@ class CreditEvaluator:
 
     @staticmethod
     def _log_result(ev: CompanyEvaluation) -> None:
+        """
+        Registra en logs un resumen compacto del resultado final.
+
+        Útil para trazabilidad y debugging en ejecución batch.
+        """
         logger.info(
             f"[{ev.ticker}] "
             f"Altman: {ev.altman_result.credit_decision if ev.altman_result else 'N/A'} | "
