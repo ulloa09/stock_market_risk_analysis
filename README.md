@@ -7,6 +7,7 @@
 
 **Acceso al reporte ejecutivo en formato DOCX (Exclusivo para comunidad ITESO):** [Ver reporte ejecutivo](https://iteso01-my.sharepoint.com/:w:/g/personal/mauricio_martinezu_iteso_mx/IQBRM82ZCPLZQonGqP_lUsEVARAc8oejKg9iqF9KI6HlSg0?e=PRFUOm)
 
+**Acceso a los documentos referenciados (Exclusivo para comunidad ITESO):** [Ver documentos de referencia](https://iteso01-my.sharepoint.com/:f:/g/personal/mauricio_martinezu_iteso_mx/IgA54VjABvW5SYQh_3pfmCFTAac2vbrdIAGDOZRkLqm2Wnc?e=ESNdDJ)
 
 ---
 
