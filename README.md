@@ -2,11 +2,12 @@
 
 > Motor cuantitativo de riesgo crediticio que evalúa la probabilidad de insolvencia corporativa combinando el Z-Score de Altman (1968/1983/1995) con el Modelo Estructural de Merton (1974), ejecutado desde una interfaz web local con generación automática de reportes en PDF.
 
-**Autor:** Mauricio Martínez Ulloa  
+**Autor:** Mauricio Martínez Ulloa
 **Diagrama de arquitectura:** [Ver arquitectura del sistema](https://ulloa09.github.io/stock_market_risk_analysis/)
-**Acceso al reporte ejecutivo en formato DOCX (Exclusivo para comunidad ITESO):**
-[Ver reporte ejecutivo]
-(https://iteso01-my.sharepoint.com/:w:/g/personal/mauricio_martinezu_iteso_mx/IQBRM82ZCPLZQonGqP_lUsEVARAc8oejKg9iqF9KI6HlSg0?e=PRFUOm)
+
+**Acceso al reporte ejecutivo en formato DOCX (Exclusivo para comunidad ITESO):** [Ver reporte ejecutivo](https://iteso01-my.sharepoint.com/:w:/g/personal/mauricio_martinezu_iteso_mx/IQBRM82ZCPLZQonGqP_lUsEVARAc8oejKg9iqF9KI6HlSg0?e=PRFUOm)
+
+
 ---
 
 ## Tabla de Contenidos
