@@ -1,15 +1,19 @@
 """
 plotter.py
 ----------
-Genera gráficos con estilo oscuro consistente con la UI:
+Capa de visualización del sistema de riesgo crediticio.
 
-    1. zscore_comparison   — Altman Z-score por empresa con zonas
-    2. merton_dd           — Distance to Default por empresa
-    3. merton_pd           — Probabilidad de Default (%) por empresa
-    4. risk_heatmap        — Scatter Z-score vs PD (mapa combinado)
+Genera gráficos estáticos (PNG) a partir del DataFrame resumen
+con resultados de Altman y Merton.
 
+Características de diseño:
+    - Backend "Agg" para ejecución headless (CLI / API / servidores).
+    - Estilo oscuro consistente con la interfaz.
+    - Cada gráfico es independiente y tolerante a datos faltantes.
+
+No realiza cálculos financieros.
+Solo consume resultados previamente evaluados.
 """
-
 from __future__ import annotations
 
 import logging
@@ -35,6 +39,7 @@ _TEXT      = "#e8e4de"
 _MUTED     = "#666666"
 _GRID      = "#222222"
 
+# Paleta semántica basada en decisión crediticia consolidada.
 _C = {
     "APROBAR":      "#22c55e",   # verde
     "ZONA GRIS":    "#eab308",   # amarillo
@@ -46,7 +51,12 @@ _DEFAULT_OUTPUT_DIR = Path("outputs/plots")
 
 
 def _apply_dark_style(fig, axes):
-    """Aplica estilo oscuro a figura y lista de ejes."""
+    """
+    Aplica configuración visual homogénea a la figura.
+
+    Centraliza el estilo para evitar duplicación
+    y garantizar consistencia entre gráficos.
+    """
     fig.patch.set_facecolor(_BG)
     for ax in (axes if isinstance(axes, (list, tuple)) else [axes]):
         ax.set_facecolor(_SURFACE)
@@ -68,12 +78,23 @@ def _save(fig, path: Path, dpi: int) -> Path:
 
 
 class CreditPlotter:
+    """
+    Orquestador de generación de gráficos financieros.
 
+    Produce:
+        - Comparación de Z-score.
+        - Distance to Default (DD).
+        - Probabilidad de Default (PD).
+        - Mapa combinado Z-score vs PD.
+
+    Cada métod0 retorna la ruta del archivo generado.
+    """
     def __init__(self, output_dir: str = str(_DEFAULT_OUTPUT_DIR), dpi: int = 150):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.dpi = dpi
 
+        # Configuración global de estilo matplotlib (una sola vez por instancia).
         plt.rcParams.update({
             "font.family":       "DejaVu Sans",
             "font.size":         10,
@@ -102,6 +123,13 @@ class CreditPlotter:
         evaluations: dict[str, CompanyEvaluation],
         summary_df: pd.DataFrame,
     ) -> dict[str, Path]:
+        """
+        Punto de entrada principal para generación de visualizaciones.
+
+        Ejecuta todos los gráficos de forma secuencial.
+        Si uno falla o no tiene datos suficientes,
+        los demás continúan generándose.
+        """
         paths = {}
         # Z-score: puede generar 1 o más gráficas dependiendo de cuántos modelos se usaron
         zscore_paths = self.plot_zscore(summary_df, evaluations)
@@ -114,7 +142,7 @@ class CreditPlotter:
 
     # ── Gráfico 1: Z-score (una gráfica por modelo si hay más de uno) ──────────
 
-    # Umbrales por modelo (safe, distress)
+    # Umbrales oficiales por versión del modelo Altman.
     _ZSCORE_THRESHOLDS = {
         "original": (2.99, 1.81, "Z ≥ 2.99", "Z < 1.81"),
         "prime":    (2.90, 1.23, "Z' ≥ 2.90", "Z' < 1.23"),
@@ -137,10 +165,10 @@ class CreditPlotter:
         evaluations: dict[str, CompanyEvaluation] | None = None,
     ) -> dict[str, Path]:
         """
-        Genera una gráfica de Z-score por cada modelo Altman usado.
-        Si solo hay un modelo → dict con key 'zscore_comparison'.
-        Si hay varios → 'zscore_original', 'zscore_prime', 'zscore_double_prime'.
-        Si no se pasan evaluations → comportamiento anterior (un solo gráfico).
+        Genera gráfico(s) de Z-score segmentados por versión del modelo.
+
+        Si múltiples versiones de Altman fueron utilizadas
+        (Original, Z', Z''), se crea un gráfico independiente por modelo.
         """
         df = summary_df.dropna(subset=["Z-score"]).copy()
         if df.empty:
@@ -226,8 +254,11 @@ class CreditPlotter:
 
     def plot_merton_dd(self, summary_df: pd.DataFrame) -> Path:
         """
-        Barras verticales del DD. Rojo = empresa en distress (DD < 0).
-        Línea horizontal en DD=0 (punto de default técnico).
+        Visualiza Distance to Default (DD) por empresa.
+
+        Interpretación:
+            DD < 0 → default técnico.
+            DD alto → mayor distancia al punto de insolvencia.
         """
         df = summary_df.dropna(subset=["DD (Merton)"]).copy()
         if df.empty:
@@ -271,8 +302,10 @@ class CreditPlotter:
 
     def plot_merton_pd(self, summary_df: pd.DataFrame) -> Path:
         """
-        Barras horizontales de PD (%) ordenadas de mayor a menor riesgo.
-        Líneas verticales en los umbrales 1% y 5%.
+        Visualiza Probabilidad de Default (PD) estimada por Merton.
+
+        Los umbrales 1% y 5% reflejan criterios heurísticos
+        comunes en práctica crediticia.
         """
         df = summary_df.dropna(subset=["PD (Merton)"]).copy()
         if df.empty:
@@ -322,9 +355,12 @@ class CreditPlotter:
 
     def plot_risk_heatmap(self, summary_df: pd.DataFrame) -> Path:
         """
-        Scatter Z-score (X) vs PD% (Y). Cada punto = empresa.
-        Límites calculados para que los puntos no queden pegados a los bordes.
-        Leyenda fuera del área de datos (esquina superior izquierda exterior).
+        Mapa de riesgo combinado:
+            Eje X → Z-score (Altman).
+            Eje Y → PD (%) (Merton).
+
+        Permite visualizar coherencia o divergencia
+        entre riesgo contable y riesgo estructural.
         """
         df = summary_df.dropna(subset=["Z-score", "PD (Merton)"]).copy()
         if df.empty:
@@ -415,6 +451,11 @@ class CreditPlotter:
     # ── Fallback ────────────────────────────────────────────────────────────
 
     def _empty(self, name: str, message: str) -> Path:
+        """
+        Genera gráfico placeholder cuando no existen datos.
+
+        Evita romper el pipeline visual en ejecuciones batch.
+        """
         fig, ax = plt.subplots(figsize=(8, 4))
         _apply_dark_style(fig, ax)
         ax.text(0.5, 0.5, message, ha="center", va="center",

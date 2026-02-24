@@ -1,18 +1,20 @@
 """
 main.py
 -------
-Punto de entrada del sistema de evaluación crediticia.
-Orquesta el pipeline completo:
+Orquestador principal del pipeline de evaluación crediticia.
 
-    1. Recibir tickers del usuario
-    2. Descargar / cargar desde caché los datos financieros
-    3. Ejecutar Altman Z-score y Merton sobre cada empresa
-    4. Consolidar decisiones crediticias
-    5. Generar gráficos
-    6. Generar reporte Markdown
+Responsabilidades:
+    1. Obtener datos financieros.
+    2. Ejecutar modelos (Altman + Merton).
+    3. Ejecutar evaluación consolidada.
+    4. Generar visualizaciones.
+    5. Construir reporte final.
 
-Diseñado para ejecutarse localmente y como base de la API FastAPI.
-Cada paso es independiente — si falla uno, los demás continúan.
+Diseñado para:
+    - Ejecución CLI.
+    - Integración como backend para API FastAPI.
+
+Cada etapa está desacoplada para mantener robustez y trazabilidad.
 """
 
 from __future__ import annotations
@@ -39,17 +41,22 @@ def run_pipeline(
     output_dir: str = "outputs",          # ← NUEVO: cada job de API pasa su propio path
 ) -> dict:
     """
-    Ejecuta el pipeline completo de evaluación crediticia.
+    Ejecuta el flujo completo de análisis crediticio.
 
     Parámetros:
-        tickers:       lista de símbolos bursátiles (e.g., ["AAPL", "F", "ADBE"])
-        force_refresh: si True, re-descarga todos los datos ignorando caché
-        output_dir:    directorio raíz donde se guardan plots y reportes.
-                       Por defecto "outputs/" para ejecución CLI.
-                       La API pasa "outputs/jobs/{job_id}" para aislar cada análisis.
+        tickers        → lista de símbolos bursátiles.
+        force_refresh  → ignora caché local si es True.
+        output_dir     → directorio raíz para artefactos generados.
 
     Retorna:
-        dict con evaluations, summary_df, plot_paths y report_path.
+        Diccionario con:
+            - evaluations
+            - summary_df
+            - plot_paths
+            - report_path
+
+    Esta función es el punto de integración central
+    entre dominio financiero, visualización y reporte.
     """
     from data.fetcher import FinancialDataFetcher
     from models.altman_zscore import AltmanZScore
@@ -58,7 +65,7 @@ def run_pipeline(
     from visualization.plotter import CreditPlotter
     from reporting.report_generator import ReportGenerator
 
-    # Construir subdirectorios a partir de output_dir
+    # Construcción dinámica de estructura de salida por ejecución.
     base = Path(output_dir)
     plots_dir   = str(base / "plots")
     reports_dir = str(base / "reports")
@@ -72,6 +79,7 @@ def run_pipeline(
     # 1. Descarga de datos
     # ------------------------------------------------------------------
     logger.info("PASO 1 — Descarga / caché de datos financieros")
+    # Capa de adquisición de datos (infraestructura).
     fetcher = FinancialDataFetcher(data_dir="data/")
     companies = fetcher.fetch_multiple(tickers, force_refresh=force_refresh)
 
@@ -86,6 +94,7 @@ def run_pipeline(
     # 2. Modelos
     # ------------------------------------------------------------------
     logger.info("PASO 2 — Instanciando modelos")
+    # Modelos cuantitativos (capa de dominio financiero).
     altman = AltmanZScore()
     merton = MertonModel(risk_free_rate=risk_free_rate, T=1.0)
 
@@ -93,6 +102,7 @@ def run_pipeline(
     # 3. Evaluación crediticia
     # ------------------------------------------------------------------
     logger.info("PASO 3 — Evaluación crediticia")
+    # Evaluador consolidado que aplica reglas de decisión conjunta.
     evaluator  = CreditEvaluator(altman_model=altman, merton_model=merton)
     evaluations = evaluator.evaluate_all(companies)
     summary_df  = evaluator.summary_dataframe(evaluations)
@@ -103,6 +113,7 @@ def run_pipeline(
     # 4. Visualizaciones
     # ------------------------------------------------------------------
     logger.info("PASO 4 — Generando gráficos")
+    # Generación de visualizaciones (capa de presentación gráfica).
     plotter    = CreditPlotter(output_dir=plots_dir)
     plot_paths = plotter.plot_all(evaluations, summary_df)
 
@@ -110,6 +121,7 @@ def run_pipeline(
     # 5. Reporte Markdown
     # ------------------------------------------------------------------
     logger.info("PASO 5 — Generando reporte Markdown")
+    # Generación de reporte final en Markdown.
     reporter    = ReportGenerator(output_dir=reports_dir)
     report_path = reporter.generate(
         evaluations=evaluations,
@@ -130,7 +142,17 @@ def run_pipeline(
 
 
 def _print_summary(evaluations, summary_df) -> None:
-    """Imprime resumen en consola con modelo usado y componentes intermedios."""
+    """
+    Imprime en consola un resumen detallado por empresa.
+
+    Incluye:
+        - Modelo Altman utilizado.
+        - Componentes internos (ratios / variables).
+        - DD y PD de Merton.
+        - Decisión consolidada y justificación.
+
+    Diseñado para debugging y revisión manual.
+    """
     print("\n" + "=" * 70)
     print("  RESUMEN DE EVALUACIÓN CREDITICIA")
     print("=" * 70)
