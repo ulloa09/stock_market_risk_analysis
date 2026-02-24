@@ -24,7 +24,25 @@ logger = logging.getLogger(__name__)
 
 
 class MertonModel(CreditModel):
+    """
+    Implementación estructural del modelo de Merton (1974).
 
+    Marco conceptual:
+    -----------------
+    El equity se modela como una opción call europea sobre el valor total
+    de los activos de la firma (V_A), con precio de ejercicio igual al
+    valor nominal de la deuda (D).
+
+    Supuestos estructurales:
+        - V_A sigue un proceso log-normal (Geometric Brownian Motion).
+        - Estructura de capital simple: Activos = Deuda + Equity.
+        - Default ocurre si V_A < D al horizonte T.
+        - Mercados sin fricciones y tasa libre de riesgo constante.
+
+    Esta implementación utiliza una aproximación basada en balance sheet,
+    estimando la volatilidad de activos (σ_A) mediante log-retornos
+    históricos de Total Assets. No implementa la versión KMV iterativa.
+    """
     def __init__(self, risk_free_rate: float = 0.045, T: float = 1.0):
         self.r = risk_free_rate
         self.T = T
@@ -34,6 +52,19 @@ class MertonModel(CreditModel):
         return "Merton Model (1974)"
 
     def calculate(self, company) -> ModelResult:
+        """
+        Estima Distance to Default (DD) y Probabilidad de Default (PD).
+
+        Procedimiento:
+            1. Extraer V_A (Total Assets más reciente).
+            2. Definir D como proxy del default point.
+            3. Estimar σ_A con log-retornos históricos anuales.
+            4. Aplicar fórmula cerrada de DD.
+            5. Transformar DD en PD usando la CDF normal estándar.
+
+        Retorna:
+            ModelResult con métricas cuantitativas y decisión crediticia.
+        """
         ticker = company.ticker
         warnings = []
 
@@ -102,6 +133,9 @@ class MertonModel(CreditModel):
             )
 
         assets_chrono = assets_series.iloc[::-1].values.astype(np.float64)
+
+        # Estimación de volatilidad de activos (σ_A)
+        # Se utilizan log-retornos anuales y desviación estándar muestral (ddof=1).
         log_returns   = np.diff(np.log(assets_chrono))
         sigma_A       = float(np.std(log_returns, ddof=1))
 
@@ -115,7 +149,13 @@ class MertonModel(CreditModel):
         ln_ratio = np.log(V_A / D)
         drift    = (self.r - 0.5 * sigma_A**2) * self.T
         denom    = sigma_A * np.sqrt(self.T)
+
+        # Fórmula cerrada de Distance to Default:
+        # DD = [ ln(V_A / D) + (r - 0.5σ_A²)T ] / (σ_A √T)
         DD = (ln_ratio + drift) / denom
+
+        # Probabilidad de default bajo distribución normal estándar:
+        # PD = 1 - N(DD)
         PD = float(1 - norm.cdf(DD))
 
         decision, zone = self._credit_decision(PD, DD)
@@ -146,6 +186,13 @@ class MertonModel(CreditModel):
 
     @staticmethod
     def _extract_series(df: pd.DataFrame, aliases: list[str]) -> Optional[pd.Series]:
+        """
+        Busca un concepto contable dentro del DataFrame
+        utilizando múltiples posibles aliases.
+
+        Retorna:
+            Serie ordenada en orden descendente (año más reciente primero).
+        """
         for alias in aliases:
             if alias in df.index:
                 series = df.loc[alias].dropna()
@@ -155,6 +202,13 @@ class MertonModel(CreditModel):
 
     @staticmethod
     def _credit_decision(PD: float, DD: float) -> tuple[str, str]:
+        """
+        Traduce métricas cuantitativas (PD, DD)
+        a una decisión crediticia operativa.
+
+        Los umbrales son heurísticos y pueden
+        ajustarse según política interna.
+        """
         if PD < 0.01:
             return "APROBAR", f"Investment Grade (PD={PD:.2%}, DD={DD:.2f})"
         elif PD < 0.05:

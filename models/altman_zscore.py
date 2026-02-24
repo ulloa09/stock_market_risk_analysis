@@ -77,10 +77,13 @@ def _get_zone(score: float, zones: list) -> tuple[str, str]:
 
 class _BalanceExtractor:
     """
-    Extrae valores del balance sheet y estado de resultados de yfinance.
-    yfinance no es consistente en los nombres de conceptos entre tickers,
-    por lo que se intentan múltiples aliases por concepto.
-    Se toma siempre el año fiscal más reciente (primera columna).
+    Adaptador de datos contables provenientes de yfinance.
+
+    Resuelve inconsistencias en nomenclatura mediante
+    búsqueda por aliases.
+
+    Aísla la lógica de extracción de datos del modelo financiero,
+    siguiendo el principio de separación de responsabilidades.
     """
 
     # Aliases por concepto — se prueban en orden, se usa el primero encontrado
@@ -154,10 +157,18 @@ class _BalanceExtractor:
 
 class AltmanZScore(CreditModel):
     """
-    Implementa Z, Z' y Z'' de Altman con selección automática por sector.
+    Implementación integral del modelo discriminante de Altman.
 
-    El clasificador de sector decide qué versión usar. El usuario nunca
-    necesita especificarlo — el modelo se adapta al tipo de empresa.
+    Integra automáticamente tres versiones históricas:
+        - Z (1968) → manufactureras públicas
+        - Z' (1983) → manufactureras privadas
+        - Z'' (1995) → no manufactureras / servicios
+
+    El modelo aplica análisis discriminante múltiple sobre
+    ratios contables normalizados.
+
+    No produce probabilidad explícita de default;
+    genera un score continuo clasificado en zonas de riesgo.
     """
 
     def __init__(self):
@@ -169,8 +180,14 @@ class AltmanZScore(CreditModel):
 
     def calculate(self, company) -> ModelResult:
         """
-        Calcula el Z-score apropiado para la empresa.
-        Selecciona automáticamente Z, Z' o Z'' según sector e industria.
+        Punto de entrada principal del modelo Altman.
+
+        Flujo:
+            1. Validar disponibilidad de estados financieros.
+            2. Determinar versión aplicable vía SectorClassifier.
+            3. Delegar al métod0 específico (Z, Z' o Z'').
+
+        El usuario no necesita seleccionar manualmente la versión.
         """
         ticker = company.ticker
 
@@ -205,7 +222,10 @@ class AltmanZScore(CreditModel):
 
     def _calculate_original(self, company, ext: _BalanceExtractor) -> ModelResult:
         """
-        Z = 1.2·X1 + 1.4·X2 + 3.3·X3 + 0.6·X4 + 1.0·X5
+        Implementación de Z (1968) para manufactureras públicas.
+
+        Incluye X4 basado en Market Capitalization,
+        lo que introduce sensibilidad a precios bursátiles.
 
         X1 = Working Capital / Total Assets
         X2 = Retained Earnings / Total Assets
@@ -237,6 +257,10 @@ class AltmanZScore(CreditModel):
         if not current_assets or not current_liab:
             warnings.append("Working Capital calculado con datos parciales.")
 
+        # Cálculo de ratios financieros normalizados por Total Assets.
+        # Cada ratio representa una dimensión económica distinta:
+        # liquidez, rentabilidad acumulada, eficiencia operativa,
+        # apalancamiento de mercado y rotación de activos.
         x1 = working_capital / total_assets
         x2 = (retained_earnings or 0) / total_assets
         x3 = (ebit or 0) / total_assets
@@ -269,11 +293,10 @@ class AltmanZScore(CreditModel):
 
     def _calculate_prime(self, company, ext: _BalanceExtractor) -> ModelResult:
         """
-        Z' = 0.717·X1 + 0.847·X2 + 3.107·X3 + 0.420·X4 + 0.998·X5
+        Implementación de Z' (1983) para manufactureras privadas.
 
-        Diferencia clave vs Z original:
-        X4 = Book Value of Equity / Total Liabilities
-             (reemplaza Market Cap — empresas privadas no tienen cotización)
+        Sustituye Market Cap por Book Equity en X4
+        y recalibra coeficientes.
         """
         model_name = "Altman Z'-score (1983, Privadas)"
         warnings = []
@@ -327,14 +350,12 @@ class AltmanZScore(CreditModel):
 
     def _calculate_double_prime(self, company, ext: _BalanceExtractor) -> ModelResult:
         """
-        Z'' = 6.56·X1 + 3.26·X2 + 6.72·X3 + 1.05·X4
+        Implementación de Z'' (1995) para empresas no manufactureras.
 
-        Diferencia clave vs Z y Z':
-        - Elimina X5 (Revenue/Assets): en empresas de servicios este ratio
-          varía enormemente por modelo de negocio, no por salud financiera.
-          Su inclusión distorsionaba el score para bancos, retailers, SaaS.
-        - Recalibra coeficientes para el universo no-manufacturero.
-        - X4 usa Book Equity (no Market Cap) — más estable y universal.
+        Elimina X5 (Ventas/Activos) para evitar sesgo sectorial
+        por intensidad de activos
+        Recalibra coeficientes para el universo no-manufacturero.
+        X4 usa Book Equity (no Market Cap) para hacerlo más estable y universal.
         """
         model_name = "Altman Z''-score (1995, No Manufactureras)"
         warnings = []
@@ -358,6 +379,8 @@ class AltmanZScore(CreditModel):
         if not book_equity:
             warnings.append("Book Equity no disponible — X4 se calcula como 0.")
 
+        # Ratios contables normalizados por activos.
+        # Versión más conservadora y universal del modelo Altman.
         x1 = working_capital / total_assets
         x2 = (retained_earnings or 0) / total_assets
         x3 = (ebit or 0) / total_assets
