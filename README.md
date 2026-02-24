@@ -141,11 +141,37 @@ pydantic
 
 > **Dependencias del sistema para WeasyPrint** — necesarias para generar el PDF:
 >
-> | Sistema operativo | Comando |
-> |---|---|
-> | Ubuntu / Debian | `sudo apt-get install libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info` |
-> | macOS (Homebrew) | `brew install pango cairo libffi gdk-pixbuf` |
-> | Windows | Instalar el [runtime GTK3](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) — descargar y ejecutar el instalador `.exe` más reciente |
+> **Ubuntu / Debian:**
+> ```bash
+> sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 \
+>     libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+> ```
+>
+> **macOS (Homebrew):**
+>
+> Paso 1 — instalar Pango:
+> ```bash
+> brew install pango
+> ```
+> Si no tienes Homebrew: https://brew.sh
+>
+> Paso 2 — exponer las librerías al entorno virtual (**obligatorio, sin esto WeasyPrint no las encuentra aunque estén instaladas**):
+> ```bash
+> # Apple Silicon (M1/M2/M3)
+> echo 'export DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH"' >> ~/.zshrc && source ~/.zshrc
+>
+> # Intel Mac
+> echo 'export DYLD_LIBRARY_PATH="/usr/local/lib:$DYLD_LIBRARY_PATH"' >> ~/.zshrc && source ~/.zshrc
+> ```
+>
+> Paso 3 — verificar que funciona (con el entorno virtual activado):
+> ```bash
+> python -c "from weasyprint import HTML; print('WeasyPrint OK')"
+> ```
+>
+> **Windows:**
+>
+> Instalar el [runtime GTK3](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) — descargar y ejecutar el instalador `.exe` más reciente.
 
 ---
 
@@ -174,7 +200,9 @@ venv\Scripts\activate
 
 ### 3. Instalar dependencias del sistema para WeasyPrint
 
-Seguir la tabla de la sección [Requisitos](#requisitos) según tu sistema operativo antes de continuar.
+Seguir las instrucciones de la sección [Requisitos](#requisitos) según tu sistema operativo **antes de continuar**.
+
+> **macOS — no omitir el paso de `DYLD_LIBRARY_PATH`**. Instalar Pango con Homebrew no es suficiente: el entorno virtual no encuentra las librerías hasta que se exporta esa variable. Sin ese paso, la generación de PDF falla silenciosamente.
 
 ### 4. Instalar dependencias Python
 
