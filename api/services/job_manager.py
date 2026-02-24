@@ -23,6 +23,10 @@ Persistencia:
 Actualmente en memoria (dict).
 En entorno productivo debería reemplazarse por Redis o base de datos.
 """
+import uuid
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Optional, Any
 
 # Directorio base donde cada job crea su estructura aislada de archivos
 _JOBS_BASE_DIR = Path("outputs/jobs")
