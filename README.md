@@ -151,7 +151,7 @@ pydantic
 >
 > Paso 1 — instalar Pango:
 > ```bash
-> brew install pango
+> brew install pango cairo libffi gdk-pixbuf
 > ```
 > Si no tienes Homebrew: https://brew.sh
 >
