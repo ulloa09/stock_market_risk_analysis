@@ -51,13 +51,17 @@ _SCHEMAS = {
 
 class CacheManager:
     """
-    Interfaz de lectura/escritura contra CSVs locales.
+    Gestor de persistencia en CSV para datos financieros descargados.
 
-    Uso:
-        cache = CacheManager("data/")
-        cache.save(company_financials)
-        data  = cache.load("AAPL")          # None si no existe
-        stale = cache.is_stale("AAPL", "2024-09-30")
+    Principios de diseño:
+    ---------------------
+    1. Single Responsibility: únicamente maneja I/O local.
+    2. Formato long estable para estados financieros.
+    3. Estrategia upsert por ticker para evitar duplicados.
+
+    No contiene lógica financiera ni validaciones de negocio.
+    Actúa como capa de infraestructura entre el proveedor externo
+    (Yahoo Finance) y el dominio del modelo (Altman/Merton).
     """
 
     def __init__(self, data_dir: str = "data/"):
@@ -70,17 +74,25 @@ class CacheManager:
     # ------------------------------------------------------------------
 
     def is_cached(self, ticker: str) -> bool:
-        """True si el ticker existe en companies.csv."""
+        """
+        Verifica si el ticker existe en companies.csv.
+
+        No valida vigencia ni integridad de datos,
+        únicamente presencia en caché.
+        """
         df = self._read("companies")
         return ticker in df["ticker"].values
 
     def is_stale(self, ticker: str, latest_fiscal_year: Optional[str]) -> bool:
         """
-        Retorna True si hay que re-descargar.
+        Determina si el caché local está desactualizado.
 
-        Condición: el año fiscal más reciente en caché es anterior al
-        latest_fiscal_year que acaba de reportar Yahoo Finance.
-        Si latest_fiscal_year es None → conservador, no re-descarga.
+        Criterio:
+            latest_fiscal_year (fuente externa)
+            > last_fiscal_year (almacenado en CSV)
+
+        La comparación es lexicográfica porque se utiliza
+        formato ISO-8601 (YYYY-MM-DD), que preserva orden temporal.
         """
         if not self.is_cached(ticker):
             return True
@@ -102,8 +114,16 @@ class CacheManager:
 
     def save(self, company) -> None:
         """
-        Persiste un CompanyFinancials en los CSVs.
-        Si el ticker ya existe, sobreescribe sus filas (upsert).
+        Persiste un objeto CompanyFinancials en los CSVs locales.
+
+        Operación tipo upsert:
+            - Elimina filas previas del ticker.
+            - Inserta los datos más recientes.
+
+        Se separan:
+            - Metadata (companies.csv)
+            - Estados financieros (long-format)
+            - Métricas de mercado (market_data.csv)
         """
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc).isoformat()
@@ -156,8 +176,14 @@ class CacheManager:
 
     def load(self, ticker: str):
         """
-        Reconstruye un CompanyFinancials desde los CSVs.
-        Retorna None si el ticker no existe.
+        Reconstruye un objeto CompanyFinancials desde almacenamiento local.
+
+        Proceso:
+            1. Leer metadata.
+            2. Reconstruir estados financieros (long → wide).
+            3. Restaurar métricas de mercado.
+
+        No realiza validaciones de consistencia externa.
         """
         from data.fetcher import CompanyFinancials
 
@@ -217,7 +243,12 @@ class CacheManager:
         return self.data_dir / _FILES[key]
 
     def _init_files(self) -> None:
-        """Crea los CSVs vacíos con headers si no existen."""
+        """
+        Inicializa los CSVs con su esquema base si no existen.
+
+        Garantiza que la estructura de columnas sea estable
+        incluso antes de la primera descarga.
+        """
         for key, columns in _SCHEMAS.items():
             path = self._path(key)
             if not path.exists():
@@ -225,7 +256,12 @@ class CacheManager:
                 logger.debug(f"Creado {path}")
 
     def _read(self, key: str) -> pd.DataFrame:
-        """Lee un CSV. Retorna DataFrame vacío si el archivo está vacío."""
+        """
+        Lee un CSV y retorna DataFrame.
+
+        Si el archivo está vacío o corrupto parcialmente,
+        retorna DataFrame vacío con esquema esperado.
+        """
         path = self._path(key)
         try:
             df = pd.read_csv(path)
@@ -237,7 +273,14 @@ class CacheManager:
         df.to_csv(self._path(key), index=False)
 
     def _upsert_row(self, key: str, key_col: str, key_val: str, row: dict) -> None:
-        """Inserta o sobreescribe una fila identificada por key_col=key_val."""
+        """
+        Inserta o reemplaza una fila identificada por clave primaria lógica.
+
+        Estrategia:
+            1. Filtrar filas con misma key.
+            2. Concatenar nueva fila.
+            3. Persistir archivo completo.
+        """
         df = self._read(key)
         # Eliminar fila existente si hay
         df = df[df[key_col] != key_val]
@@ -249,11 +292,12 @@ class CacheManager:
         self, key: str, ticker: str, df_wide: pd.DataFrame
     ) -> None:
         """
-        Convierte DataFrame wide a long-format y hace upsert en el CSV.
+        Convierte un DataFrame wide (formato yfinance)
+        a long-format y realiza upsert por ticker.
 
-        df_wide:
-            index   = conceptos (e.g., "Total Assets")
-            columns = Timestamps (fechas de reporte)
+        Justificación:
+            El long-format evita columnas dinámicas por fecha
+            y mantiene el esquema estable en CSV.
         """
         # Leer existente y eliminar filas del ticker para reemplazar
         existing = self._read(key)
@@ -279,8 +323,13 @@ class CacheManager:
 
     def _load_financial_df(self, key: str, ticker: str) -> pd.DataFrame:
         """
-        Lee long-format desde CSV y reconstruye DataFrame wide.
-        Retorna DataFrame vacío si no hay datos para el ticker.
+        Reconstruye un DataFrame wide desde long-format almacenado.
+
+        Pasos:
+            - Filtrar por ticker.
+            - Pivot (concept × date).
+            - Convertir columnas a Timestamp.
+            - Ordenar cronológicamente descendente.
         """
         df = self._read(key)
         df_ticker = df[df["ticker"] == ticker].copy()

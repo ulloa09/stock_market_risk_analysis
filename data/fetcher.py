@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 class FinancialDataProvider(ABC):
+    """
+    Interfaz abstracta para proveedores de datos financieros.
+
+    Permite desacoplar la fuente de datos (Yahoo, API privada,
+    base de datos institucional, etc.) del resto del sistema.
+
+    Facilita testing mediante implementación mock.
+    """
 
     @abstractmethod
     def get_income_statement(self, ticker: str) -> pd.DataFrame:
@@ -67,6 +75,16 @@ class FinancialDataProvider(ABC):
 
 @dataclass
 class CompanyFinancials:
+    """
+    Contenedor inmutable (dataclass) de información financiera anual.
+
+    Incluye:
+        - Estados financieros completos.
+        - Métricas de mercado necesarias para Merton.
+        - Metadata sectorial para selección del modelo Altman.
+
+    No contiene lógica de cálculo financiero.
+    """
     ticker: str
     sector: str
     industry: str
@@ -86,6 +104,13 @@ class CompanyFinancials:
     fetch_errors: list[str] = field(default_factory=list)
 
     def is_valid(self) -> bool:
+        """
+        Determina si existen datos mínimos para análisis.
+
+        Requisito actual:
+            - Balance sheet no vacío.
+            - Al menos 1 año disponible.
+        """
         return not self.balance_sheet.empty and self.years_available >= 1
 
 
@@ -94,6 +119,15 @@ class CompanyFinancials:
 # ---------------------------------------------------------------------------
 
 class YahooFinanceProvider(FinancialDataProvider):
+    """
+    Implementación concreta de FinancialDataProvider
+    utilizando la librería yfinance.
+
+    Consideraciones:
+        - Dependencia externa no garantizada.
+        - Se limita el número de años descargados.
+        - Se incluye fallback para tasa libre de riesgo.
+    """
 
     _TNX_TICKER = "^TNX"
 
@@ -102,8 +136,13 @@ class YahooFinanceProvider(FinancialDataProvider):
 
     def get_latest_fiscal_year(self, ticker: str) -> Optional[str]:
         """
-        Llamada ligera: solo descarga el balance sheet para leer
-        la fecha de la columna más reciente, sin traer los 3 estados completos.
+        Consulta ligera para detectar nuevo reporte anual.
+
+        Solo descarga el balance sheet y extrae
+        la fecha más reciente disponible.
+
+        Optimiza llamadas evitando descargar
+        los tres estados financieros completos.
         """
         try:
             bs = yf.Ticker(ticker).balance_sheet
@@ -149,6 +188,12 @@ class YahooFinanceProvider(FinancialDataProvider):
             return 0.045
 
     def _trim(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Limita el DataFrame al número máximo de años configurado.
+
+        Previene crecimiento innecesario en memoria
+        y tamaño de almacenamiento.
+        """
         if df is None or df.empty:
             return pd.DataFrame()
         return df.iloc[:, : self.max_years]
@@ -160,23 +205,15 @@ class YahooFinanceProvider(FinancialDataProvider):
 
 class FinancialDataFetcher:
     """
-    Orquestador principal. Coordina descargas con el caché local en CSV.
+    Orquestador de descarga y sincronización con caché CSV.
 
-    Flujo:
-        fetch(ticker)
-            └── ¿ticker en CSVs locales?
-                    No  → descarga completa → guarda en CSV → retorna
-                    Sí  → get_latest_fiscal_year() [llamada ligera a Yahoo]
-                            └── ¿nuevo reporte disponible?
-                                    No → retorna desde CSV (sin descarga)
-                                    Sí → descarga completa → actualiza CSV → retorna
+    Responsabilidades:
+        - Decidir si descargar o usar caché.
+        - Coordinar proveedor externo.
+        - Persistir datos válidos.
+        - Aislar errores de red o parsing.
 
-    Uso:
-        fetcher = FinancialDataFetcher()
-        data    = fetcher.fetch("AAPL")
-        results = fetcher.fetch_multiple(["AAPL", "F", "ADBE"])
-        rf      = fetcher.get_risk_free_rate()
-        cached  = fetcher.list_cached_tickers()
+    No implementa lógica de análisis financiero.
     """
 
     def __init__(
@@ -193,11 +230,13 @@ class FinancialDataFetcher:
 
     def fetch(self, ticker: str, force_refresh: bool = False) -> CompanyFinancials:
         """
-        Retorna CompanyFinancials del ticker. Usa caché CSV si está actualizado.
+        Obtiene datos financieros de un ticker.
 
-        Parámetros:
-            ticker:        símbolo bursátil (e.g., "AAPL")
-            force_refresh: si True, ignora caché y descarga siempre
+        Estrategia:
+            1. Verificar existencia en caché.
+            2. Consultar último FY remoto.
+            3. Decidir si actualizar.
+            4. Descargar solo si es necesario.
         """
         ticker = ticker.upper().strip()
 
@@ -214,9 +253,9 @@ class FinancialDataFetcher:
         self, tickers: list[str], force_refresh: bool = False
     ) -> dict[str, CompanyFinancials]:
         """
-        Procesa múltiples tickers. Cada uno pasa por la lógica de caché CSV.
-        Retorna {ticker: CompanyFinancials} incluyendo los que fallaron
-        con is_valid() == False para que el caller los maneje explícitamente.
+        Ejecuta fetch de forma independiente para múltiples tickers.
+
+        No detiene ejecución ante fallos individuales.
         """
         return {t: self.fetch(t, force_refresh=force_refresh) for t in tickers}
 
@@ -232,7 +271,13 @@ class FinancialDataFetcher:
     # ------------------------------------------------------------------
 
     def _download_and_save(self, ticker: str) -> CompanyFinancials:
-        """Descarga todos los datos del ticker y los persiste en CSV."""
+        """
+        Descarga todos los componentes financieros y los encapsula
+        en CompanyFinancials.
+
+        Si los datos mínimos no están disponibles,
+        no se persisten en caché.
+        """
         logger.info(f"[{ticker}] Descargando desde Yahoo Finance.")
         errors: list[str] = []
 
@@ -267,7 +312,12 @@ class FinancialDataFetcher:
 
     @staticmethod
     def _safe_fetch(name: str, ticker: str, fn, errors: list, default):
-        """Ejecuta fn(ticker), captura excepciones, retorna default si falla."""
+        """
+        Wrapper de ejecución segura para llamadas externas.
+
+        Captura excepciones, registra el error
+        y retorna valor por defecto sin interrumpir flujo.
+        """
         try:
             return fn(ticker)
         except Exception as e:
