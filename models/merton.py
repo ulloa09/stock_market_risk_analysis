@@ -147,11 +147,11 @@ class MertonModel(CreditModel):
             )
 
         ln_ratio = np.log(V_A / D)
-        drift    = (self.r - 0.5 * sigma_A**2) * self.T
+        drift    = (self.r + 0.5 * sigma_A**2) * self.T
         denom    = sigma_A * np.sqrt(self.T)
 
         # Fórmula cerrada de Distance to Default:
-        # DD = [ ln(V_A / D) + (r - 0.5σ_A²)T ] / (σ_A √T)
+        # DD = [ ln(V_A / D) + (r + 0.5σ_A²)T ] / (σ_A √T)
         DD = (ln_ratio + drift) / denom
 
         # Probabilidad de default bajo distribución normal estándar:
@@ -256,7 +256,7 @@ iterativa del sistema de ecuaciones), se usan datos del balance directamente:
 **Distance to Default:**
 
 ```
-DD = [ ln(V_A / D) + (r - σ_A² / 2) · T ] / (σ_A · √T)
+DD = [ ln(V_A / D) + (r + σ_A² / 2) · T ] / (σ_A · √T)
 ```
 
 **Probabilidad de Default:**
